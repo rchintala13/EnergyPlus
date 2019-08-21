@@ -2880,6 +2880,14 @@ ElectricStorage::ElectricStorage( // main constructor
         storageModelMode_ = StorageModelType::kiBaMBattery;
     }
 
+    testStorageIndex = inputProcessor->getObjectItemNum("ElectricLoadCenter:Storage:LiIonBattery",objectName)
+    if (testStorageIndex > 0) {
+        foundStorage = true;
+        storageIDFObjectNum = testStorageIndex;
+        DataIPShortCuts::cCurrentModuleObject = "ElectricLoadCenter:Storage:LiIonBattery";
+        storageModelMode_ = StorageModelType::LiIonBattery;
+    }
+
     if (foundStorage) {
         inputProcessor->getObjectItem(DataIPShortCuts::cCurrentModuleObject,
                                       storageIDFObjectNum,
@@ -3053,6 +3061,60 @@ ElectricStorage::ElectricStorage( // main constructor
             }
             break;
         }
+
+        case StorageModelType::LiIonBattery: {
+
+            if (UtilityRoutines::SameString(DataIPShortCuts::cAlphaArgs(4), "Yes")) {
+                lifeCalculation_ = BatteyDegredationModelType::lifeCalculationYes;
+            } else if (UtilityRoutines::SameString(DataIPShortCuts::cAlphaArgs(4), "No")) {
+                lifeCalculation_ = BatteyDegredationModelType::lifeCalculationNo;
+            } else {
+                ShowWarningError(routineName + DataIPShortCuts::cCurrentModuleObject + "=\"" + DataIPShortCuts::cAlphaArgs(1) + "\", invalid entry.");
+                ShowContinueError("Invalid " + DataIPShortCuts::cAlphaFieldNames(6) + " = " + DataIPShortCuts::cAlphaArgs(6));
+                ShowContinueError("Yes or No should be selected. Default value No is used to continue simulation");
+                lifeCalculation_ = BatteyDegredationModelType::lifeCalculationNo;
+            }
+
+
+                cycleBinNum_ = DataIPShortCuts::rNumericArgs(14);
+
+                if (!errorsFound) { // life cycle calculation for this battery, allocate arrays for degradation calculation
+                                    // std::vector is zero base instead of 1, so first index is now 0.
+                    b10_.resize(maxRainflowArrayBounds_ + 1, 0.0);
+                    x0_.resize(maxRainflowArrayBounds_ + 1, 0);
+                    nmb0_.resize(cycleBinNum_, 0.0);
+                    oneNmb0_.resize(cycleBinNum_, 0.0);
+                }
+            }
+
+            parallelNum_ = DataIPShortCuts::rNumericArgs(2);
+            seriesNum_ = DataIPShortCuts::rNumericArgs(3);
+            numBattery_ = parallelNum_ * seriesNum_;
+            maxAhCapacity_ = DataIPShortCuts::rNumericArgs(4);
+            startingSOC_ = DataIPShortCuts::rNumericArgs(5);
+            chargedOCV_ = DataIPShortCuts::rNumericArgs(6);
+            dischargedOCV_ = DataIPShortCuts::rNumericArgs(7);
+            internalR_ = DataIPShortCuts::rNumericArgs(8);
+            maxDischargeI_ = DataIPShortCuts::rNumericArgs(9);
+            cutoffV_ = DataIPShortCuts::rNumericArgs(10);
+            maxChargeRate_ = DataIPShortCuts::rNumericArgs(11);
+
+            SetupOutputVariable("Electric Storage Operating Mode Index", OutputProcessor::Unit::None, storageMode_, "System", "Average", name_);
+            SetupOutputVariable("Electric Storage Battery Charge State",
+                                OutputProcessor::Unit::Ah,
+                                absoluteSOC_,
+                                "System",
+                                "Average",
+                                name_); // issue #4921
+            SetupOutputVariable("Electric Storage Charge Fraction", OutputProcessor::Unit::None, fractionSOC_, "System", "Average", name_);
+            SetupOutputVariable("Electric Storage Total Current", OutputProcessor::Unit::A, batteryCurrent_, "System", "Average", name_);
+            SetupOutputVariable("Electric Storage Total Voltage", OutputProcessor::Unit::V, batteryVoltage_, "System", "Average", name_);
+
+            if (lifeCalculation_ == BatteyDegredationModelType::lifeCalculationYes) {
+                SetupOutputVariable("Electric Storage Degradation Fraction", OutputProcessor::Unit::None, batteryDamage_, "System", "Average", name_);
+            }
+            break;
+        }
         case StorageModelType::storageTypeNotSet: {
             // do nothing
             break;
@@ -3117,6 +3179,17 @@ ElectricStorage::ElectricStorage( // main constructor
                                       qdotRadZone_);
                 break;
             }
+
+            case StorageModelType::LiIonBattery: {
+                SetupZoneInternalGain(zoneNum_,
+                                      "ElectricLoadCenter:Storage:LiIonBattery",
+                                      name_,
+                                      DataHeatBalance::IntGainTypeOf_ElectricLoadCenterStorageBattery,
+                                      qdotConvZone_,
+                                      _,
+                                      qdotRadZone_);
+                break;
+
             case StorageModelType::storageTypeNotSet: {
                 // do nothing
                 break;

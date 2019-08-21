@@ -238,7 +238,7 @@ public: // methods
     void calcAndReportKineticBatteryModel();
 
     void reinitAtBeginEnvironment();
-
+    
     void reinitZoneGainsAtBeginEnvironment();
 
     void reinitAtEndWarmup();
@@ -300,7 +300,8 @@ private: // data
     {
         storageTypeNotSet = 0,
         simpleBucketStorage,
-        kiBaMBattery
+        kiBaMBattery,
+        LiIonBattery
     };
 
     enum class BatteyDegredationModelType : int
